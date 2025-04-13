@@ -1,7 +1,5 @@
 #include <main.hpp>
-//#define TOUCHCAPACITIVE
-#define TOUCHRESISTIVE
-// #define LVGL_TASK
+//  #define LVGL_TASK
 #undef ESP_ERROR_CHECK
 #define ESP_ERROR_CHECK(x)                   \
   do                                         \
@@ -36,8 +34,12 @@
 
 static JC4827W543R display{};
 // display NV3041A—480 x 272
+#if TOUCHRESISTIVE
 device::XPT2046_t touchResistive;
+#endif
+#if TOUCHCAPACITIVE
 device::GT911_t touchCapacitive;
+#endif
 uint32_t tickc = 0;
 char stringInfoMem[100];
 lv_obj_t *labelFrequency;
@@ -46,7 +48,7 @@ lv_obj_t *labelTune;
 lv_obj_t *scale;
 lv_obj_t *screen;
 lv_obj_t *line;
-lv_style_t  stylescreen;
+lv_style_t stylescreen;
 
 enum
 {
@@ -198,21 +200,48 @@ static long map(long x, long in_min, long in_max, long out_min, long out_max)
   return (delta * rise) / run + out_min;
 }
 
-#ifdef TOUCHRESISTIVE
-static float display_x_for_touch(const int16_t x)
-{
-  static float fact_x = (float)TFT_WIDTH / (touchResistive._max_xp - touchResistive._min_xp);
-  return float(x - touchResistive._min_xp) * fact_x;
-}
+#if TOUCHRESISTIVE
 
-static float display_y_for_touch(const int16_t y)
+void display_x_for_touch(const int16_t x, const int16_t y, int32_t *rx, int32_t *ry)
 {
+
+#if TFT_ORIENTATION == 1
+
+  static float fact_y = (float)TFT_WIDTH / (touchResistive._max_yp - touchResistive._min_yp);
+  *rx = float(touchResistive._max_yp - y) * fact_y;
+
+  static float fact_x = (float)TFT_HEIGHT / (touchResistive._max_xp - touchResistive._min_xp);
+  *ry = float(x - touchResistive._min_xp) * fact_x;
+
+#elif TFT_ORIENTATION == 2
+
+  static float fact_x = (float)TFT_WIDTH / (touchResistive._max_xp - touchResistive._min_xp);
+  *rx = float(touchResistive._max_xp - x) * fact_x;
+
   static float fact_y = (float)TFT_HEIGHT / (touchResistive._max_yp - touchResistive._min_yp);
-  return float(y - touchResistive._min_yp) * fact_y;
+  *ry = float(touchResistive._max_yp - y) * fact_y;
+
+#elif TFT_ORIENTATION == 3
+
+  static float fact_y = (float)TFT_WIDTH / (touchResistive._max_yp - touchResistive._min_yp);
+  *rx = float(y - touchResistive._min_yp) * fact_y;
+
+  static float fact_x = (float)TFT_HEIGHT / (touchResistive._max_xp - touchResistive._min_xp);
+  *ry = float(touchResistive._max_xp - x) * fact_x;
+
+#else // 0
+
+  static float fact_x = (float)TFT_WIDTH / (touchResistive._max_xp - touchResistive._min_xp);
+  *rx = float(x - touchResistive._min_xp) * fact_x;
+
+  static float fact_y = (float)TFT_HEIGHT / (touchResistive._max_yp - touchResistive._min_yp);
+  *ry = float(y - touchResistive._min_yp) * fact_y;
+
+#endif
 }
 #endif
 
-#ifdef TOUCHCAPACITIVE
+#if TOUCHCAPACITIVE
 bool touch_swap_xy = false;
 int16_t touch_map_x1 = -1;
 int16_t touch_map_x2 = -1;
@@ -253,20 +282,6 @@ void touch_capacitive_init(int16_t w, int16_t h, uint8_t r)
   {
     switch (r)
     {
-    case 3:
-      touch_swap_xy = true;
-      touch_map_x1 = touch_max_x;
-      touch_map_x2 = 0;
-      touch_map_y1 = 0;
-      touch_map_y2 = touch_max_y;
-      break;
-    case 2:
-      touch_swap_xy = false;
-      touch_map_x1 = touch_max_x;
-      touch_map_x2 = 0;
-      touch_map_y1 = touch_max_y;
-      touch_map_y2 = 0;
-      break;
     case 1:
       touch_swap_xy = true;
       touch_map_x1 = 0;
@@ -274,19 +289,34 @@ void touch_capacitive_init(int16_t w, int16_t h, uint8_t r)
       touch_map_y1 = touch_max_y;
       touch_map_y2 = 0;
       break;
-    default: // case 0:
+    case 2:
       touch_swap_xy = false;
       touch_map_x1 = 0;
       touch_map_x2 = touch_max_x;
       touch_map_y1 = 0;
       touch_map_y2 = touch_max_y;
       break;
+    case 3:
+      touch_swap_xy = true;
+      touch_map_x1 = touch_max_x;
+      touch_map_x2 = 0;
+      touch_map_y1 = 0;
+      touch_map_y2 = touch_max_y;
+      break;
+
+    default: // case 0:
+      touch_swap_xy = false;
+      touch_map_x1 = touch_max_x;
+      touch_map_x2 = 0;
+      touch_map_y1 = touch_max_y;
+      touch_map_y2 = 0;
+      break;
     }
   }
 }
 #endif
 
-#ifdef TOUCHRESISTIVE
+#if TOUCHRESISTIVE
 static void touch_resistive_init(void)
 {
 
@@ -310,7 +340,7 @@ static void touch_resistive_init(void)
 void my_touchpad_read(lv_indev_t *indev_driver, lv_indev_data_t *data)
 {
 
-#ifdef TOUCHCAPACITIVE
+#if TOUCHCAPACITIVE
   if (display.GT911Read(&touchCapacitive))
   {
     TP_Point t = display.GT911GetPoint(&touchCapacitive, 0);
@@ -332,12 +362,15 @@ void my_touchpad_read(lv_indev_t *indev_driver, lv_indev_data_t *data)
 
 #endif
 
-#ifdef TOUCHRESISTIVE
+#if TOUCHRESISTIVE
 
   if (display.touch_getxy(&touchResistive))
   {
-    data->point.x = display_x_for_touch(touchResistive._xp);
-    data->point.y = display_y_for_touch(touchResistive._yp);
+    // data->point.y =
+    display_x_for_touch(touchResistive._xp, touchResistive._yp, &data->point.x, &data->point.y);
+
+    // data->point.x = display_y_for_touch(touchResistive._yp);
+
     data->state = LV_INDEV_STATE_PR;
   }
   else
@@ -811,10 +844,9 @@ void create_screen(void)
   lv_style_init(&style_line);
   lv_style_set_line_width(&style_line, 5);
   lv_style_set_line_color(&style_line, lv_palette_main(LV_PALETTE_RED));
-  
 
   line = lv_line_create(screen);
-  lv_line_set_points(line, line_points, 2); 
+  lv_line_set_points(line, line_points, 2);
   lv_obj_add_style(line, &style_line, 0);
   lv_obj_set_pos(line, POS_X - 1 + 0, POS_Y + 1);
 
@@ -830,7 +862,7 @@ void create_screen(void)
 
   static lv_style_t style;
   lv_style_init(&style);
-  lv_style_set_text_font(&style, &lv_font_montserrat_48); 
+  lv_style_set_text_font(&style, &lv_font_montserrat_48);
   lv_style_set_text_color(&style, LV_COLOR_MAKE(0x24, 0x02, 0xF5));
   lv_obj_add_style(labelFrequency, &style, 0);
   lv_label_set_text(labelFrequency, "0");
@@ -1070,8 +1102,8 @@ void dial_canvas(uint32_t fr, uint16_t fr_band_min, uint16_t fr_band_max, uint8_
 
 extern "C" void app_main(void)
 {
- 
-  setup(); 
+
+  setup();
   while (1)
   {
     loop();
@@ -1102,16 +1134,15 @@ void setup(void)
   gpio_set_level(GPIO_NUM_38, true);
   eeprom.begin(EEPROM_SIZE);
   display.init();
-#ifdef TOUCHCAPACITIVE
-  touch_capacitive_init(480, 272, 2);
+#if TOUCHCAPACITIVE
+  touch_capacitive_init(TFT_WIDTH, TFT_HEIGHT, TFT_ORIENTATION);
 #endif
 
-#ifdef TOUCHRESISTIVE
+#if TOUCHRESISTIVE
 
   touch_resistive_init();
 
 #endif
-
 
 #ifdef LVGL_TASK
 #if !LV_TICK_CUSTOM
@@ -1131,11 +1162,11 @@ void setup(void)
 #endif
 
   display.back_ligth(250);
-  lvgl_init(); 
+  lvgl_init();
   create_screen();
   lv_scr_load(screen);
 
-#if 0 // teste de tempo de escrita no buffer display em SPIRAM e RAM 
+#if 0 // teste de tempo de escrita no buffer display em SPIRAM e RAM
 #define LEN 64
     ESP_LOGI("TAG", "inicializando");
     uint8_t *bf;

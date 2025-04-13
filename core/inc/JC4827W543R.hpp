@@ -5,8 +5,27 @@
 #include <driver/ledc.h>
 
 #define TFT_ORIENTATION 0
+#define TOUCHCAPACITIVE 1
+#define TOUCHRESISTIVE  0
+
+
+
+#if TFT_ORIENTATION == 1 || TFT_ORIENTATION == 3
+
+#define TFT_WIDTH 272
+#define TFT_HEIGHT 480
+
+#else
+
 #define TFT_WIDTH 480
 #define TFT_HEIGHT 272
+
+#endif
+
+
+
+
+
 
 #define TOUCH_IRQ GPIO_NUM_3
 #define TOUCH_MOSI GPIO_NUM_11
@@ -470,7 +489,7 @@ public:
 
   TP_Point GT911GetPoint(GT911_t *dev, uint8_t n)
   {
-    uint8_t rotation = 0;
+    // uint8_t rotation = 0;
     TP_Point t;
     uint16_t point_reg[5] = GT911_POINTS_REG;
     uint16_t offset = point_reg[n] - GT911_POINT_INFO;
@@ -478,17 +497,6 @@ public:
     t.x = raw_data[offset + 1] + (raw_data[offset + 2] << 8);
     t.y = raw_data[offset + 3] + (raw_data[offset + 4] << 8);
     t.size = raw_data[offset + 5] | (raw_data[offset + 6] << 8);
-
-    if (rotation == 0)
-    {
-    }
-    else if (rotation == 1)
-    {
-      uint16_t tmp = t.x;
-      t.x = t.y;
-      t.y = tmp;
-    }
-    // ESP_LOGI(LOG_TAG, "x=%u y=%u", t.x, t.y);
     return t;
   }
 
